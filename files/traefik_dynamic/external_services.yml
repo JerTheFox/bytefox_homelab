@@ -1,0 +1,97 @@
+http:
+  # MIDDLEWARES
+  middlewares:
+    only-vpn-and-local:
+      ipWhiteList:
+        sourceRange:
+          - "127.0.0.1/32"      # Сам сервер
+          - "192.168.1.0/24"    # Домашняя сеть
+          - "192.168.99.0/24"   # VPN клиенты
+          - "172.16.0.0/12"     # Docker
+
+  # РОУТЕРЫ
+  routers:
+    syncthing-router:
+      rule: "Host(`syncthing.lab.local`)"
+      service: "syncthing-service"
+      entryPoints:
+        - "web"
+      middlewares:
+        - "only-vpn-and-local"
+
+    vaultwarden-router:
+      rule: "Host(`vw.bytefox.ru`)"
+      service: "vaultwarden-service"
+      entryPoints:
+        - "websecure"
+      tls: {}
+      middlewares:
+        - "only-vpn-and-local"
+
+    urbackup-router:
+      rule: "Host(`backup.lab.local`)"
+      service: "urbackup-service"
+      entryPoints:
+        - "web"
+      middlewares:
+        - "only-vpn-and-local"
+
+    bluemap:
+      rule: "Host(`map.bytefox.ru`)"
+      service: "bluemap-service"
+      entryPoints:
+        - "websecure"
+      tls: {}
+      middlewares:
+        - "only-vpn-and-local"
+
+    booklore:
+      rule: "Host(`books.bytefox.ru`)"
+      service: "booklore-service"
+      entryPoints:
+        - "websecure"
+      tls: {}
+      middlewares:
+        - "only-vpn-and-local"
+
+  # СЕРВИСЫ
+  services:
+    syncthing-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.100:8384"
+
+    vaultwarden-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.100:1880"
+
+    urbackup-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.101:55414"
+
+    bluemap-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.100:8100"
+
+    booklore-service:
+      loadBalancer:
+        servers:
+          - url: "http://192.168.1.100:6060"
+
+# TCP СЕКЦИЯ
+tcp:
+  routers:
+    mc-router:
+      entryPoints:
+        - "minecraft"
+      rule: "HostSNI(`*`)"
+      service: "mc-service"
+
+  services:
+    mc-service:
+      loadBalancer:
+        servers:
+          - address: "192.168.1.100:25565"

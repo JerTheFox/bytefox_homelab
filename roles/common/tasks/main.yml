@@ -1,0 +1,123 @@
+---
+# SYSTEM SETUP
+- name: Set timezone to {{ timezone }}
+  become: true
+  timezone:
+    name: "{{ timezone }}"
+
+- name: Install system dependencies
+  become: true
+  apt:
+    name:
+      - systemd-timesyncd
+      - git
+      - curl
+      - acl
+      - jq
+      - net-tools
+    state: present
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Ensure NTP service is running
+  become: true
+  service:
+    name: systemd-timesyncd
+    state: started
+    enabled: yes
+
+- name: Create project root directory ({{ root_dir }})
+  file:
+    path: "{{ root_dir }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: '0755'
+
+# KERNEL TUNING (BBR)
+- name: Enable TCP BBR congestion control
+  become: true
+  block:
+    - name: Ensure tcp_bbr module is loaded
+      modprobe:
+        name: tcp_bbr
+        state: present
+
+    - name: Enable BBR via sysctl
+      sysctl:
+        name: "{{ item.key }}"
+        value: "{{ item.value }}"
+        state: present
+        sysctl_set: yes
+        reload: yes
+      loop:
+        - { key: 'net.core.default_qdisc', value: 'fq' }
+        - { key: 'net.ipv4.tcp_congestion_control', value: 'bbr' }
+
+# SECURITY
+- name: Enable UFW and deny incoming by default
+  become: true
+  community.general.ufw:
+    state: enabled
+    policy: deny
+    direction: incoming
+
+- name: Allow SSH
+  become: true
+  community.general.ufw:
+    rule: allow
+    port: '22'
+    proto: tcp
+
+- name: Allow Common Monitoring Ports
+  become: true
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ common_monitoring_ports }}" # /inventory/group_vars/vars.yml
+
+- name: Configure SSH Hardening
+  become: true
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    validate: 'sshd -t -f %s'
+  loop:
+    - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+    - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+  notify: Restart SSH
+
+# DOCKER SETUP
+- name: Add cron job for docker system prune
+  cron:
+    name: "Docker System Prune"
+    minute: "0"
+    hour: "4"
+    weekday: "0"
+    job: "/usr/bin/docker system prune -af --volumes > /dev/null 2>&1"
+
+- name: Ensure Docker systemd drop-in directory exists
+  become: true
+  file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure Docker to wait for network-online
+  become: true
+  copy:
+    dest: /etc/systemd/system/docker.service.d/wait-for-net.conf
+    content: |
+      [Unit]
+      After=network-online.target firewalld.service
+      Wants=network-online.target
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload Systemd
+    - Restart Docker

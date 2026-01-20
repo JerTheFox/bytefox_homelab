@@ -1,0 +1,10 @@
+---
+compose_template: "../templates/backup/docker-compose.yml.j2"
+backup_drive_path: "/raid/backups"
+
+backup_tcp_ports:
+  - "55413" # UB FastCGI
+  - "55414" # UB Web UI
+  - "55415" # UB Internet clients
+  - "9100"  # Node Exporter
+  - "9001"  # Portainer Agent

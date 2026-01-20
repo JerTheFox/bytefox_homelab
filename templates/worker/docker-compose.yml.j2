@@ -1,0 +1,279 @@
+networks:
+  proxy_net:
+    driver: bridge
+
+volumes:
+  syncthing_config:
+    external: true
+    name: syncthing_config
+  site_repo_data:
+    name: site_repo_data
+
+services:
+  # MONITORING
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    hostname: {{ inventory_hostname }}
+    restart: always
+    environment:
+      - TZ={{ timezone }}
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($|/)'
+    ports:
+      - "9100:9100"
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    hostname: {{ inventory_hostname }}
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - proxy_net
+    command:
+      - "-housekeeping_interval=15s"
+      - "-docker_only=true"
+
+  portainer_agent:
+    image: portainer/agent:alpine
+    container_name: portainer_agent
+    restart: always
+    environment:
+      - TZ={{ timezone }}
+    ports:
+      - "9001:9001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # Агенту Portainer необходим доступ к реальному сокету для управления
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - {{ root_dir }}/promtail_config/promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    environment:
+      - HOSTNAME={{ ansible_hostname }}
+    networks:
+      - proxy_net
+
+  # INFRASTRUCTURE
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: docker-proxy
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1 # Разрешаем читать список
+      - SERVICES=1
+      - TASKS=1
+      - POST=0 # Только чтение
+    ports:
+      - "2375:2375"
+    networks:
+      - proxy_net
+
+  # USER APPLICATIONS
+  syncthing:
+    image: linuxserver/syncthing:latest
+    container_name: syncthing
+    hostname: srv-worker-01
+    restart: unless-stopped
+    environment:
+      - PUID={{ puid | default('1000') }}
+      - PGID={{ pgid | default('1000') }}
+      - TZ={{ timezone }}
+    volumes:
+      - syncthing_config:/config
+      - {{ data_drive_path }}/obsidian:/data1
+    ports:
+      - "8384:8384" # Web UI
+      - "22000:22000/tcp" # Sync Protocol
+      - "22000:22000/udp" # QUIC
+      - "21027:21027/udp" # Discovery
+
+  minecraft:
+    image: itzg/minecraft-server:java21
+    container_name: minecraft
+    restart: unless-stopped
+    ports:
+      - "25565:25565"
+      - "8100:8100"
+      - "9225:9225"
+    environment:
+      - EULA=TRUE
+      - TYPE=NEOFORGE
+      - VERSION=1.21.1
+      - NEOFORGE_VERSION=21.1.217
+      - TZ={{ timezone }}
+      - UID={{ puid }}
+      - GID={{ pgid }}
+      - MEMORY=12G
+      - JVM_XX_OPTS=-XX:+UseZGC -XX:+ZGenerational -XX:-ZUncommit -XX:ZUncommitDelay=2147483647 -XX:+DisableExplicitGC -XX:+AlwaysPreTouch
+      - MOTD=§6🦊 Bytefox 🦊
+      - SEED="-7619464217852751294"
+      - LEVEL=world
+      - MAX_PLAYERS=5
+      - DIFFICULTY=hard
+      - MODE=survival
+      - PVP=false
+      - ALLOW_FLIGHT=true
+      - SPAWN_PROTECTION=0
+      - VIEW_DISTANCE=10
+      - SIMULATION_DISTANCE=10
+      - GENERATE_STRUCTURES=true
+      - ALLOW_NETHER=true
+      - ENABLE_WHITELIST=true
+      - ENFORCE_WHITELIST=true
+      - ONLINE_MODE=true
+      - ENABLE_RCON=true
+      - RCON_PASSWORD={{ rcon_password }}
+      - RCON_PORT=25575
+      - LOG_TIMESTAMP=true
+    volumes:
+      - {{ data_drive_path }}/minecraft/data:/data
+    networks:
+      - proxy_net
+
+  mc-backup:
+    image: itzg/mc-backup
+    container_name: mc_backup
+    restart: unless-stopped
+    environment:
+      - TZ={{ timezone }}
+      - BACKUP_METHOD=tar
+      - CRON_SCHEDULE=0 2 * * *
+      - CRON_BACKUP_UID={{ puid }}
+      - PRUNE_BACKUPS_COUNT=3
+      - PRUNE_BACKUPS_DAYS=0
+      - SRC_DIR=/data
+      - EXCLUDES=cache,logs,*.tmp,crash-reports,bluemap
+      - RCON_HOST=minecraft
+      - RCON_PORT=25575
+      - RCON_PASSWORD={{ rcon_password }}
+      - PRE_BACKUP_SCRIPT=rcon-cli save-off && rcon-cli save-all flush
+      - POST_BACKUP_SCRIPT=rcon-cli save-on
+    volumes:
+      - {{ data_drive_path }}/minecraft/data:/data:ro
+      - {{ data_drive_path }}/minecraft/backups:/backups
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    depends_on:
+      - minecraft
+    networks:
+      - proxy_net
+
+  vaultwarden:
+    container_name: vaultwarden
+    image: vaultwarden/server:latest
+    restart: always
+    environment:
+      - TZ={{ timezone }}
+    ports:
+      - "1880:80" # WebUI
+    volumes:
+      - {{ data_drive_path }}/vaultwarden:/data
+
+  booklore_db:
+    image: lscr.io/linuxserver/mariadb:11.4.5
+    container_name: booklore_db
+    restart: unless-stopped
+    environment:
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - TZ={{ timezone }}
+      - MYSQL_ROOT_PASSWORD={{ booklore_db_root_password }}
+      - MYSQL_DATABASE=booklore
+      - MYSQL_USER=booklore
+      - MYSQL_PASSWORD={{ booklore_db_password }}
+    volumes:
+      - {{ data_drive_path }}/booklore/db_config:/config
+    networks:
+      - proxy_net
+    healthcheck:
+      test: [ "CMD", "mariadb-admin", "ping", "-h", "localhost" ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  booklore:
+    image: booklore/booklore:latest
+    container_name: booklore
+    restart: unless-stopped
+    depends_on:
+      booklore_db:
+        condition: service_healthy
+    environment:
+      - USER_ID={{ puid }}
+      - GROUP_ID={{ pgid }}
+      - TZ={{ timezone }}
+      - BOOKLORE_PORT=6060
+      - DATABASE_URL=jdbc:mariadb://booklore_db:3306/booklore
+      - DATABASE_USERNAME=booklore
+      - DATABASE_PASSWORD={{ booklore_db_password }}
+    volumes:
+      - {{ data_drive_path }}/booklore/data:/app/data
+      - {{ data_drive_path }}/booklore/books:/books
+      - {{ data_drive_path }}/booklore/bookdrop:/bookdrop
+    ports:
+      - "6060:6060"
+    networks:
+      - proxy_net
+    healthcheck:
+      test: wget -q -O - http://localhost:6060/api/v1/healthcheck
+      interval: 60s
+      retries: 5
+      start_period: 60s
+      timeout: 10s
+
+# FILE SHARING
+  samba:
+    image: servercontainers/samba:latest
+    container_name: samba
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - "ACCOUNT_{{ smb_username }}={{ smb_password }}"
+      - "UID_{{ smb_username }}={{ puid | default('1000') }}"
+      - SAMBA_GLOBAL_CONFIG_workgroup=WORKGROUP
+      - SAMBA_CONF_SERVER_STRING=ByteFox Library
+      - "SAMBA_GLOBAL_STANZA=hosts allow = 192.168.1.0/24 127.0.0.1; hosts deny = 0.0.0.0/0"
+      - "SAMBA_VOLUME_CONFIG_bookdrop=[BookDrop]; path=/shares/bookdrop; valid users={{ smb_username }}; guest ok=no; read only=no; browseable=yes; create mask=0644; directory mask=0755; force user={{ smb_username }}"
+    volumes:
+      - {{ data_drive_path }}/booklore/bookdrop:/shares/bookdrop
+
+# CUSTOM AUTOMATION
+  obsidian-publisher:
+    build: {{ root_dir }}/obsidian_publisher
+    container_name: obsidian-publisher
+    restart: unless-stopped
+    user: "{{ puid }}:{{ pgid }}"
+    environment:
+      - TZ={{ timezone }}
+      - SITE_REPO_URL=ssh://git@gitlab.lab.local:2222/homelab/bytefox-site.git
+      - GIT_SSH_COMMAND=ssh -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -i /ssh_keys/id_ed25519 # Git SSH Command
+    volumes:
+      - {{ data_drive_path }}/obsidian:/data/obsidian:ro # Исходники заметок
+      - site_repo_data:/app/site-repo # Репозиторий сайта
+      - /home/{{ sys_user }}/.ssh/id_ed25519:/ssh_keys/id_ed25519:ro # SSH

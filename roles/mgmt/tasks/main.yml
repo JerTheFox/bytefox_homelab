@@ -1,0 +1,114 @@
+---
+# NETWORK & FIREWALL
+- name: Allow specific TCP ports
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ mgmt_tcp_ports }}"
+
+- name: Allow specific UDP ports
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: udp
+  loop: "{{ mgmt_udp_ports }}"
+
+- name: Allow Loki API from Local Network
+  community.general.ufw:
+    rule: allow
+    port: '3100'
+    proto: tcp
+    src: '192.168.1.0/24'
+    comment: 'Allow Loki Push'
+
+- name: Allow Backup Server Access (UrBackup)
+  community.general.ufw:
+    rule: allow
+    src: "{{ ip_backup }}"
+    comment: 'Allow UrBackup Server'
+
+# VPN NAT CONFIGURATION
+- name: Configure VPN Network (Forwarding & NAT)
+  block:
+    - name: Allow UDP Forwarding for VPN
+      community.general.ufw:
+        rule: allow
+        route: yes
+        src: '192.168.99.0/24'
+        proto: udp
+
+    - name: Enable IPv4 forwarding
+      sysctl:
+        name: net.ipv4.ip_forward
+        value: '1'
+        sysctl_set: yes
+        state: present
+        reload: yes
+
+    - name: Configure UFW default forward policy
+      lineinfile:
+        path: /etc/default/ufw
+        regexp: '^DEFAULT_FORWARD_POLICY='
+        line: 'DEFAULT_FORWARD_POLICY="ACCEPT"'
+      notify: Reload UFW
+
+    - name: Add NAT rules to UFW (before.rules)
+      blockinfile:
+        path: /etc/ufw/before.rules
+        insertbefore: BOF
+        marker: "# {mark} ANSIBLE MANAGED BLOCK: VPN NAT"
+        block: |
+          *nat
+          :POSTROUTING ACCEPT [0:0]
+          -A POSTROUTING -s 192.168.99.0/24 -o {{ ansible_default_ipv4.interface }} -j MASQUERADE
+          COMMIT
+      notify: Reload UFW
+
+# DIRECTORIES & FILES
+- name: Ensure configuration directories exist
+  file:
+    path: "{{ root_dir }}/{{ item }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: '0755'
+  loop: "{{ mgmt_directories }}"
+
+- name: Ensure empty access.log exists
+  copy:
+    content: ""
+    dest: "{{ root_dir }}/traefik_logs/access.log"
+    force: no
+    mode: '0644'
+    owner: "{{ sys_user }}"
+
+- name: Copy static configuration folders
+  copy:
+    src: "../files/{{ item }}/"
+    dest: "{{ root_dir }}/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: '0644'
+  loop: "{{ mgmt_static_configs }}"
+
+- name: Deploy dynamic config templates
+  template:
+    src: "{{ item.src }}"
+    dest: "{{ root_dir }}/{{ item.dest }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "{{ item.mode | default('0644') }}"
+  loop:
+    - { src: "../templates/mgmt/ocserv.conf.j2", dest: "vpn_data/ocserv.conf", mode: '0640' }
+    - { src: "../templates/mgmt/glance.yml.j2", dest: "glance_config/glance.yml", mode: '0640' }
+    - { src: "../templates/promtail-config.yml.j2", dest: "promtail_config/promtail-config.yml" }
+  notify: Restart Docker Stack
+
+# URBACKUP CLIENT
+- name: Install UrBackup Client
+  become: true
+  shell: |
+    TF=$(mktemp) && wget "https://hndl.urbackup.org/Client/2.5.25/UrBackup%20Client%20Linux%202.5.25.sh" -O $TF && sudo sh $TF; rm -f $TF
+  args:
+    creates: /usr/local/sbin/urbackupclientbackend

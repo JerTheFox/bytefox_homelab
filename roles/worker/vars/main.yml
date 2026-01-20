@@ -1,0 +1,30 @@
+---
+compose_template: "../templates/worker/docker-compose.yml.j2"
+data_drive_path: "/ssd"
+
+worker_tcp_ports:
+  - '9100'  # Node Exporter
+  - '9001'  # Portainer Agent
+  - '8384'  # Syncthing GUI
+  - '22000' # Syncthing Sync
+  - '1880'  # Vaultwarden UI
+  - '9225'  # Minecraft Prometheus
+  - '25565' # Minecraft Server
+  - '8100'  # BlueMap
+  - '6060'  # Booklore
+  - '445'   # SMB
+
+worker_udp_ports:
+  - '22000' # Syncthing Sync
+  - '21027' # Syncthing Discovery
+  - '25565' # Minecraft Server
+
+worker_data_dirs:
+  - "obsidian"
+  - "minecraft/backups"
+  - "minecraft/data"
+  - "vaultwarden"
+  - "booklore/data"
+  - "booklore/books"
+  - "booklore/bookdrop"
+  - "booklore/db_config"

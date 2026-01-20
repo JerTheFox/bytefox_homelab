@@ -1,0 +1,48 @@
+---
+# FIREWALL
+- name: Allow Backup Apps TCP
+  community.general.ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+  loop: "{{ backup_tcp_ports }}"
+
+- name: Allow UDP ports
+  community.general.ufw:
+    rule: allow
+    port: "35623"
+    proto: udp
+
+- name: Allow Mgmt Access to Docker Proxy
+  community.general.ufw:
+    rule: allow
+    src: "{{ ip_mgmt }}"
+    port: '2375'
+    proto: tcp
+
+# STORAGE
+- name: Create RAID backup directory
+  file:
+    path: "{{ backup_drive_path }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: '0770'
+
+- name: Ensure configuration directories exist
+  file:
+    path: "{{ root_dir }}/promtail_config"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: '0755'
+
+# CONFIGS
+- name: Deploy Promtail config
+  template:
+    src: "../templates/promtail-config.yml.j2"
+    dest: "{{ root_dir }}/promtail_config/promtail-config.yml"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: '0644'
+  notify: Restart Docker Stack

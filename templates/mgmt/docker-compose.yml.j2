@@ -1,0 +1,351 @@
+networks:
+  proxy_net:
+    driver: bridge
+
+volumes:
+  traefik_acme:
+    external: true
+    name: traefik_acme_data
+  portainer_data:
+    external: true
+    name: portainer_data
+  gitlab_config:
+    external: true
+    name: gitlab_config
+  gitlab_logs:
+    external: true
+    name: gitlab_logs
+  gitlab_data:
+    external: true
+    name: gitlab_data
+  grafana_data:
+    external: true
+    name: grafana_data
+  prometheus_data:
+    name: prometheus_data
+  gitlab_runner_config:
+    external: true
+    name: gitlab_runner_config
+  speedtest_config:
+    name: speedtest_config
+
+services:
+  # INGRESS & SECURITY
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: docker-proxy
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1 # Разрешаем читать список (для Traefik/Homepage/Portainer)
+      - SERVICES=1
+      - NETWORKS=1
+      - POST=0
+    networks:
+      - proxy_net
+
+  traefik:
+    image: traefik:v3.6.5
+    container_name: traefik
+    restart: always
+    depends_on:
+      - docker-proxy
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    ports:
+      - "80:80"
+      - "443:443"
+      - "25565:25565"
+    environment:
+      - DOCKER_API_VERSION=1.44
+      - REGRU_USERNAME={{ regru_username }}
+      - REGRU_PASSWORD={{ regru_password }}
+      - TZ={{ timezone }}
+      - DOCKER_HOST=tcp://docker-proxy:2375
+    volumes:
+      - traefik_acme:/etc/traefik/acme
+      - {{ root_dir }}/traefik_dynamic:/etc/traefik/dynamic # Конфиги монтируем из папки проекта
+      - {{ root_dir }}/traefik_logs:/var/log/traefik # Логи для fail2ban
+    command:
+      - "--api.insecure=true"
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--providers.docker.endpoint=tcp://docker-proxy:2375" # Явно указываем endpoint
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--entrypoints.minecraft.address=:25565"
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+      - "--certificatesresolvers.myresolver.acme.dnschallenge=true"
+      - "--certificatesresolvers.myresolver.acme.dnschallenge.provider=regru"
+      - "--certificatesresolvers.myresolver.acme.dnschallenge.delaybeforecheck=300"
+      - "--certificatesresolvers.myresolver.acme.email={{ acme_email | default('jerthefox@gmail.com') }}"
+      - "--certificatesresolvers.myresolver.acme.storage=/etc/traefik/acme/acme.json"
+      - "--accesslog=true"
+      - "--accesslog.filepath=/var/log/traefik/access.log"
+      - "--accesslog.bufferingsize=100"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.dashboard.rule=Host(`traefik.lab.local`)"
+      - "traefik.http.routers.dashboard.service=api@internal"
+      - "traefik.http.routers.dashboard.entrypoints=web"
+      - "traefik.http.routers.wildcard.rule=Host(`bytefox.ru`) || HostRegexp(`{sub:.*}.bytefox.ru`)"
+      - "traefik.http.routers.wildcard.entrypoints=websecure"
+      - "traefik.http.routers.wildcard.tls.certresolver=myresolver"
+      - "traefik.http.routers.wildcard.tls.domains[0].main=bytefox.ru"
+      - "traefik.http.routers.wildcard.tls.domains[0].sans=*.bytefox.ru"
+      - "traefik.http.routers.wildcard.service=api@internal"
+    networks:
+      - proxy_net
+
+  vpn:
+    build: {{ root_dir }}/vpn_build
+    container_name: vpn
+    restart: always
+    environment:
+      - TZ={{ timezone }}
+    privileged: true
+    ports:
+      - "4443:443/tcp"
+      - "4443:443/udp"
+    volumes:
+      - {{ root_dir }}/vpn_data:/etc/ocserv
+    networks:
+      - proxy_net
+
+  fail2ban:
+    image: crazymax/fail2ban:latest
+    container_name: fail2ban
+    restart: always
+    network_mode: host # для бана на уровне хоста
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
+    volumes:
+      - {{ root_dir }}/fail2ban_data:/data
+      - {{ root_dir }}/traefik_logs:/var/log/traefik:ro
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: always
+    depends_on:
+      - docker-proxy
+    environment:
+      - TZ={{ timezone }}
+    command: -H tcp://docker-proxy:2375
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - proxy_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.portainer.rule=Host(`portainer.lab.local`)"
+      - "traefik.http.routers.portainer.entrypoints=web"
+      - "traefik.http.services.portainer.loadbalancer.server.port=9000"
+
+  # CI/CD
+  gitlab:
+    image: 'gitlab/gitlab-ce:latest'
+    container_name: gitlab
+    restart: always
+    hostname: 'gitlab.lab.local'
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://gitlab.lab.local'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2222
+        gitlab_rails['time_zone'] = '{{ timezone }}'
+        prometheus_monitoring['enable'] = false
+        puma['worker_processes'] = 2
+        sidekiq['max_concurrency'] = 10
+    ports:
+      - '2222:22'
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+    shm_size: '256m'
+    networks:
+      - proxy_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gitlab.rule=Host(`gitlab.lab.local`)"
+      - "traefik.http.routers.gitlab.entrypoints=web"
+      - "traefik.http.services.gitlab.loadbalancer.server.port=80"
+
+  gitlab-runner:
+    image: gitlab/gitlab-runner:latest
+    container_name: gitlab-runner
+    restart: always
+    environment:
+      - TZ={{ timezone }}
+    volumes:
+      - gitlab_runner_config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - proxy_net
+
+  # MONITORING
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: grafana
+    restart: always
+    environment:
+      - TZ={{ timezone }}
+      - GF_SERVER_ROOT_URL=http://grafana.lab.local
+      - GF_SMTP_ENABLED=true
+      - GF_SMTP_HOST=mail.hosting.reg.ru:465
+      - GF_SMTP_USER={{ mail_bot_smtp_user }}
+      - GF_SMTP_PASSWORD={{ mail_bot_smtp_password }}
+      - GF_SMTP_SKIP_VERIFY=false
+      - GF_SMTP_FROM_ADDRESS={{ mail_bot_smtp_user }}
+      - GF_SMTP_FROM_NAME=ByteFox Bot
+    dns:
+      - 192.168.1.1
+      - 8.8.8.8
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - {{ root_dir }}/grafana_provisioning:/etc/grafana/provisioning
+    networks:
+      - proxy_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.grafana.rule=Host(`grafana.lab.local`)"
+      - "traefik.http.routers.grafana.entrypoints=web"
+      - "traefik.http.services.grafana.loadbalancer.server.port=3000"
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    restart: always
+    environment:
+      - TZ={{ timezone }}
+    volumes:
+      - {{ root_dir }}/prometheus_config/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=15d'
+    networks:
+      - proxy_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.prometheus.rule=Host(`prometheus.lab.local`)"
+      - "traefik.http.routers.prometheus.entrypoints=web"
+      - "traefik.http.services.prometheus.loadbalancer.server.port=9090"
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    hostname: {{ inventory_hostname }}
+    restart: always
+    environment:
+      - TZ={{ timezone }}
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($|/)'
+    networks:
+      - proxy_net
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    hostname: {{ inventory_hostname }}
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - proxy_net
+    command:
+      - "-housekeeping_interval=15s"
+      - "-docker_only=true"
+
+  speedtest-tracker:
+    image: lscr.io/linuxserver/speedtest-tracker:latest
+    restart: unless-stopped
+    container_name: speedtest-tracker
+    environment:
+      - APP_DEBUG=true
+      - DISPLAY_TIMEZONE={{ timezone }}
+      - PUID={{ puid }}
+      - PGID={{ pgid }}
+      - APP_KEY={{ speedtest_app_key }}
+      - DB_CONNECTION=sqlite
+      - APP_URL="http://speedtest.lab.local"
+      - SPEEDTEST_SKIP_IPS="127.0.0.1/32,192.168.1.0/24,192.168.99.0/24,172.16.0.0/12"
+      - SPEEDTEST_SCHEDULE="0 * * * *"
+    networks:
+      - proxy_net
+    volumes:
+      - speedtest_config:/config
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.speedtest.rule=Host(`speedtest.lab.local`)"
+      - "traefik.http.routers.speedtest.entrypoints=web"
+      - "traefik.http.services.speedtest.loadbalancer.server.port=80"
+
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - {{ root_dir }}/loki_config/loki-config.yml:/etc/loki/local-config.yaml
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - proxy_net
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro # Читаем логи контейнеров
+      - /var/run/docker.sock:/var/run/docker.sock
+      - {{ root_dir }}/promtail_config/promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    environment:
+      - HOSTNAME={{ ansible_hostname }} # Чтобы в логах видеть имя ноды
+    networks:
+      - proxy_net
+
+  # APPS
+  glance:
+    image: glanceapp/glance:latest
+    container_name: glance
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - {{ root_dir }}/glance_config:/app/config
+      - {{ root_dir }}/glance_assets:/app/assets
+    environment:
+      - TZ={{ timezone }}
+    networks:
+      - proxy_net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.glance.rule=Host(`home.bytefox.ru`)"
+      - "traefik.http.routers.glance.entrypoints=websecure"
+      - "traefik.http.routers.glance.tls=true"
+      - "traefik.http.services.glance.loadbalancer.server.port=8080"
+      - "traefik.http.routers.glance.middlewares=only-vpn-and-local@file"
+      - "traefik.http.middlewares.glance-https.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.glance-https.redirectscheme.permanent=true"

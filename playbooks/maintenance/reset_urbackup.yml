@@ -1,0 +1,39 @@
+---
+- name: Reset UrBackup Storage
+  hosts: backup
+  become: true
+  vars:
+    backup_drive_path: "/raid/backups"
+
+  tasks:
+    - name: Stop UrBackup container
+      community.docker.docker_container:
+        name: urbackup
+        state: stopped
+
+    - name: Remove all backup files
+      shell: "find {{ backup_drive_path }} -mindepth 1 -delete"
+
+    - name: Start UrBackup container
+      community.docker.docker_container:
+        name: urbackup
+        state: started
+
+    - name: Wait for UrBackup to initialize
+      pause:
+        seconds: 15
+
+    - name: Sync Database (Remove Unknown)
+      community.docker.docker_container_exec:
+        container: urbackup
+        command: urbackupsrv remove-unknown
+      register: db_sync
+
+    - name: Run Cleanup
+      community.docker.docker_container_exec:
+        container: urbackup
+        command: urbackupsrv cleanup --amount 100
+
+    - name: Show sync result
+      debug:
+        msg: "{{ db_sync.stdout }}"

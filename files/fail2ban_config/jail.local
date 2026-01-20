@@ -1,0 +1,17 @@
+[DEFAULT]
+# не банить локальные сети
+ignoreip = 127.0.0.1/8 192.168.1.0/24 192.168.99.0/24 172.16.0.0/12 10.0.0.0/8
+
+bantime = 1h
+findtime = 10m
+maxretry = 5
+backend = auto
+
+# === JAILS ===
+
+[traefik-auth]
+enabled = true
+logpath = /var/log/traefik/access.log
+port = 80,443
+filter = traefik-auth
+action = iptables-allports[name=traefik-auth]

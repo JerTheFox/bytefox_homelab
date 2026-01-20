@@ -1,0 +1,33 @@
+auth = "plain[passwd=/etc/ocserv/ocpasswd]"
+tcp-port = 443
+udp-port = 443
+run-as-user = root
+run-as-group = root
+socket-file = /var/run/ocserv-socket
+server-cert = /etc/ocserv/server-cert.pem
+server-key = /etc/ocserv/server-key.pem
+ca-cert = /etc/ocserv/ca-cert.pem
+compression = false
+dtls-legacy = false
+
+ipv4-network = 192.168.99.0
+ipv4-netmask = 255.255.255.0
+
+dns = 192.168.1.1
+dns = 8.8.8.8
+
+route = 192.168.1.0/255.255.255.0
+route = 192.168.99.0/255.255.255.0
+
+split-dns = lab.local
+split-dns = bytefox.ru
+
+keepalive = 32400
+dpd = 60
+mobile-dpd = 300
+try-mtu-discovery = true
+compression = true
+tls-priorities = "NORMAL:%SERVER_PRECEDENCE:%COMPAT:-VERS-SSL3.0:+CHACHA20-POLY1305:+AES-256-GCM:+AES-128-GCM"
+device = vpns
+mtu = 1400
+mss-fix = true

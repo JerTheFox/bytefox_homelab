@@ -1,0 +1,8 @@
+---
+your_username: "example"
+your_password: "example"
+
+another_service_username: "example"
+another_service_password: "example"
+
+# этот файл должен быть зашифрован через ansible vault, пароль хранится в переменных проекта в gitlab

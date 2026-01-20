@@ -1,0 +1,36 @@
+---
+compose_template: "../templates/mgmt/docker-compose.yml.j2"
+
+mgmt_tcp_ports:
+  - '2222'  # GitLab SSH
+  - '80'    # HTTP
+  - '443'   # HTTPS
+  - '25565' # Minecraft Proxy (TCP)
+  - '4443'  # VPN TCP
+
+mgmt_udp_ports:
+  - '4443'  # VPN UDP
+  - '25565' # Minecraft Proxy (UDP)
+
+mgmt_directories:
+  - traefik_dynamic
+  - prometheus_config
+  - vpn_build
+  - vpn_data
+  - glance_config
+  - traefik_logs
+  - fail2ban_data
+  - fail2ban_data/jail.d
+  - fail2ban_data/filter.d
+  - loki_config
+  - promtail_config
+  - grafana_provisioning
+  - grafana_provisioning/datasources
+
+mgmt_static_configs:
+  - traefik_dynamic
+  - prometheus_config
+  - vpn_build
+  - fail2ban_config
+  - loki_config
+  - grafana_provisioning

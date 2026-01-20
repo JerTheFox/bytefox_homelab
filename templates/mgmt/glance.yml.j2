@@ -1,0 +1,426 @@
+pages:
+  - name: Домашняя страница
+    width: wide
+    columns:
+      - size: small
+        widgets:
+          - type: clock
+            title: Часы
+            hour-format: 24h
+
+          - type: calendar
+            title: Календарь
+            first-day-of-week: monday
+
+          - type: weather
+            title: Погода
+            location: Moscow, Russian Federation
+            units: metric
+            hour-format: 24h
+
+          - type: custom-api
+            title: Статус Syncthing
+            cache: 300s                 # refresh interval
+            headers:                   # auth for *every* request
+              X-API-Key: {{ syncthing_srv_api }}
+            # ---------------- Main request: discover folders ----------------
+            url: "{{ syncthing_srv_url }}/rest/system/config"
+            # ---------------- Sub-requests: one per folder ------------------
+            subrequests:
+              {{ syncthing_srv_f1_id }}:
+                url: "{{ syncthing_srv_url }}/rest/db/completion"
+                parameters: { folder: "{{ syncthing_srv_f1_id }}" }
+                headers:    { X-API-Key: {{ syncthing_srv_api }} }
+              {{ syncthing_srv_f2_id }}:
+                url: "{{ syncthing_srv_url }}/rest/db/completion"
+                parameters: { folder: "{{ syncthing_srv_f2_id }}" }
+                headers:    { X-API-Key: {{ syncthing_srv_api }} }
+              {{ syncthing_srv_f3_id }}:
+                url: "{{ syncthing_srv_url }}/rest/db/completion"
+                parameters: { folder: "{{ syncthing_srv_f3_id }}" }
+                headers:    { X-API-Key: {{ syncthing_srv_api }} }
+            # ---------------- Options visible to the template ---------------
+            options:
+              debug: false             # switch to true to show JSON <details>
+              folders:
+                - id: {{ syncthing_srv_f1_id }}
+                  name: "jerthefox"
+                  enabled: true
+                - id: {{ syncthing_srv_f2_id }}
+                  name: "staymoon"
+                  enabled: true
+                - id: {{ syncthing_srv_f3_id }}
+                  name: "shared"
+                  enabled: true
+            # ---------------- Template defined earlier ----------------------
+            template: |-
+              {% raw %}
+              <!-- Syncthing folder-by-folder progress --------------------------------- -->
+              {{ $debug   := or (.Options.debug) false }}
+              {{ $folders := .Options.folders }}
+
+              {{ if ne .Response.StatusCode 200 }}
+                <!-- The *main* request failed (e.g. /rest/system/config).               -->
+                <p class="text-danger">⚠️ Syncthing API unreachable ({{ .Response.Status }})</p>
+              {{ else }}
+                <ul class="list">
+                  {{ range $folders }}
+                    {{ $id   := .id }}
+                    {{ $name := .name }}
+                    {{ if .enabled }}
+                      {{ $r := $.Subrequest $id }}
+                      {{ if eq $r.Response.StatusCode 200 }}
+                        {{ $comp := $r.JSON.Float "completion" }}
+                        <li>
+                          <span class="{{ if eq $comp 100.0 }}text-success{{ else if gt $comp 0.0 }}text-info{{ else }}text-danger{{ end }}">
+                            {{ if eq $comp 100.0 }}✔️
+                            {{ else if gt $comp 0.0 }}🔄
+                            {{ else }}⚠️
+                            {{ end }}
+                            {{ $name }} –
+                            {{ if eq $comp 100.0 }}
+                              In Sync (100 %)
+                            {{ else if gt $comp 0.0 }}
+                              Syncing ({{ printf "%.1f" $comp }} %)
+                            {{ else }}
+                              Unreachable
+                            {{ end }}
+                          </span>
+                        </li>
+                      {{ else }}
+                        <!-- Sub-request didn’t return 200 -->
+                        <li><span class="text-danger">⚠️ {{ $name }} – Unreachable</span></li>
+                      {{ end }}
+                    {{ end }}
+                  {{ end }}
+                </ul>
+              {{ end }}
+
+              {{/* ---------- OPTIONAL DEBUG BLOCK ---------- */}}
+              {{ if $debug }}
+                <details style="margin-top:0.5rem">
+                  <summary>Debug – raw Syncthing JSON</summary>
+                  <pre style="font-size:10px">
+              {{ (printf "%+v" .JSON) }}
+                  </pre>
+                </details>
+              {{ end }}
+              {% endraw %}
+
+      - size: full
+        widgets:
+          - type: search
+            title: Поиск
+            search-engine: google
+            autofocus: true
+            bangs:
+            - title: YouTube
+              shortcut: "!yt"
+              url: https://www.youtube.com/results?search_query={QUERY}
+
+          - type: split-column
+            max-columns: 3
+            widgets:
+              # Столбец 1
+              - type: bookmarks
+                title: Общение
+                groups:
+                  - same-tab: true
+                    links:
+                      - title: Telegram
+                        url: https://web.telegram.org/k/
+                      - title: WhatsApp
+                        url: https://web.whatsapp.com/
+                      - title: VK
+                        url: https://vk.com/
+                      - title: GMail
+                        url: https://mail.google.com/
+                      - title: Yandex Mail
+                        url: https://mail.yandex.ru/
+
+              # Столбец 2
+              - type: bookmarks
+                title: Медиа
+                groups:
+                  - same-tab: true
+                    links:
+                      - title: YouTube
+                        url: https://www.youtube.com/
+                      - title: Boosty
+                        url: https://boosty.to/
+                      - title: Reddit
+                        url: https://reddit.com/
+                      - title: RuTracker
+                        url: https://rutracker.org/
+                      - title: Flibusta
+                        url: https://flibusta.is/
+
+              # Столбец 3
+              - type: bookmarks
+                title: Сервисы
+                groups:
+                  - same-tab: true
+                    links:
+                      - title: Ozon
+                        url: https://ozon.ru/
+                      - title: Wildberries
+                        url: https://www.wildberries.ru/
+                      - title: Yandex Market
+                        url: https://market.yandex.ru/
+                      - title: Yandex Maps
+                        url: https://yandex.ru/maps/
+                      - title: Avito
+                        url: https://www.avito.ru/
+                      - title: Reg.ru
+                        url: https://www.reg.ru/
+                      - title: Headhunter
+                        url: https://hh.ru/
+
+              # Столбец 4
+              - type: bookmarks
+                title: ИИ
+                groups:
+                  - same-tab: true
+                    links:
+                      - title: Gemini
+                        url: https://gemini.google.com/
+                      - title: ChatGPT
+                        url: https://chatgpt.com/
+                      - title: DeepSeek
+                        url: https://chat.deepseek.com/
+
+              - type: bookmarks
+                title: Мои сервисы
+                groups:
+                  - same-tab: true
+                    links:
+                      - title: Роутер
+                        url: http://192.168.1.1/
+                      - title: Bytefox
+                        url: https://bytefox.ru/
+                      - title: BookLore
+                        url: https://books.bytefox.ru/
+
+          - type: videos
+            title: YouTube
+            channels:
+              - UCsImQfL4MrCr8UDsndx4aVA # Cathey
+              - UCOxQWb-OuyCSZadzWqrKTCQ # Булджать
+              - UCDaIW2zPRWhzQ9Hj7a0QP1w # Усачев
+              - UCByOkBSMkZaUOB2xI0R9Hlg # sereGGa
+              - UCbARtRuHOksvED-jL2tihWw # Roman Shavyakov
+              - UC101o-vQ2iOj9vr00JUlyKw # Varlamov
+              - UC3bZgJqT_LfwLfeOtDgO88A # SHAPKA
+              - UC6cqazSR6CnVMClY0bJI0Lg # BadComedian
+              - UCGNNg4w67Ahcm7ueSvjIIdw # MILKA MAKER
+              - UCzXTNApTYz6Cwqh6Naadu1A # Россия23
+              - UCw-hAJI_Cc3AzwN1B6HGY8w # ЧБД
+              - UCWwRGYtMIQ-7T8OutGx_vpg # Сибирский
+              - UCwPzq5yQwczLmivBX8zq7Mw # Люди
+              - UCXFxgPppcehs2LoiKhkakQg # Крастер
+              - UCY1kMZp36IQSyNx_9h4mpCg # Mark Rober
+              - UCj7bSQWlq2O4lhGxGll5SUA # Вписка
+              - UC1CchA0SjApw4T-AYkN7ytg # IGM
+              - UC03-38aILdlkFAAc8lE6MQg # амоБлог
+              - UC4ink5TgHMuRmSvJ2N1LOaQ # Anacondaz
+              - UCpuOloQLINtXESATBSDAgOQ # Кшиштовский
+              - UCCROBQj3rdGNc-E_aMpbV_A # MyGap
+              - UCP_FacffygRMGA4CMpO-0XA # Dagon
+              - UCCKfZSbTG0PmnAVMk0HzoEw # Странное местечко
+              - UCE1QIfI8FV152bn1kN34gyQ # PoleznyiBes
+              - UCMCgOm8GZkHp8zJ6l7_hIuA # вДудь
+              - UCdu1AosJcTPsQYFolNHki8Q # SNAILKICK
+              - UCX6OQ3DkcsbYNE6H8uQQuVA # MrBeast
+              - UC5sSL56GJWCi4wsMpobTrAw # КЛИККЛАК
+              - UCJKSH7Bw0OjRoHlg1nYXPYQ # Mr.Freeman
+              - UCf31Gf5nCU8J6eUlr7QSU0w # Marmok
+              - UC4yxdlsaRT6WpZ_FZQ6uIpQ # Satyr
+              - UC8M5YVWQan_3Elm-URehz9w # Utopia
+              - UCn9bv143ECsDMw-kJCNN7QA # Чикен Карри
+              - UCR-Hcwi27-Ee6VnGzmxE1pA # Поперечный
+              - UCe0vDqnXvyAoa4cjg12FVbA # POPOSHA
+              - UCN04AE2yY26Rw-912kgQftA # Самый сахар
+
+          - type: group
+            title: Reddit
+            widgets:
+              - type: reddit
+                subreddit: KafkaFPS
+                show-thumbnails: true
+              - type: reddit
+                subreddit: ruAsska
+                show-thumbnails: true
+              - type: reddit
+                subreddit: Popular_Science_Ru
+                show-thumbnails: true
+              - type: reddit
+                subreddit: Pikabu
+                show-thumbnails: true
+              - type: reddit
+                subreddit: homelab
+                show-thumbnails: true
+              - type: reddit
+                subreddit: selfhosted
+                show-thumbnails: true
+
+      - size: small
+        widgets:
+          - type: custom-api
+            title: Скидки в Steam
+            cache: 6h
+            url: https://store.steampowered.com/api/featuredcategories?cc=kz
+            template: |
+              {% raw %}
+              <ul class="list list-gap-10 collapsible-container" data-collapse-after="5">
+              {{ range .JSON.Array "specials.items" }}
+                <li>
+                  <a class="size-h4 color-highlight block text-truncate" href="https://store.steampowered.com/app/{{ .Int "id" }}/">{{ .String "name" }}</a>
+                  <ul class="list-horizontal-text">
+                    <li>{{ div (.Int "final_price" | toFloat) 100 | printf "%.0f ₸" }}</li>
+                    {{ $discount := .Int "discount_percent" }}
+                    <li{{ if ge $discount 40 }} class="color-positive"{{ end }}>{{ $discount }}% off</li>
+                  </ul>
+                </li>
+              {{ end }}
+              </ul>
+              {% endraw %}
+
+          - type: custom-api
+            cache: 1h
+            title: Скорость интернета
+            title-url: http://speedtest.lab.local/
+            url: http://speedtest.lab.local/api/v1/results/latest
+            headers:
+              Authorization: Bearer {{ speedtest_glance_api_key }}
+              Accept: application/json
+            subrequests:
+              stats:
+                url: http://speedtest.lab.local/api/v1/stats
+                headers:
+                  Authorization: Bearer {{ speedtest_glance_api_key }}
+                  Accept: application/json
+            options:
+              showPercentageDiff: true
+            template: |
+              {% raw %}
+              {{ $showPercentage := .Options.BoolOr "showPercentageDiff" true }}
+
+              {{ $stats := .Subrequest "stats" }}
+              <div class="flex justify-between text-center margin-block-3">
+              <div>
+                  {{ $downloadChange := percentChange ($stats.JSON.Float "data.download.avg_bits") (.JSON.Float "data.download_bits")
+                  }}
+                  {{ if $showPercentage }}
+                  <div
+                  class="size-small {{ if gt $downloadChange 0.0 }}color-positive{{ else if lt $downloadChange 0.0 }}color-negative{{ else }}color-primary{{ end }}"
+                  style="display: inline-flex; align-items: center;">
+                  {{ $downloadChange | printf "%+.1f%%" }}
+                  {{ if gt $downloadChange 0.0 }}
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"
+                      style="height: 1em; margin-left: 0.25em;" class="size-4">
+                      <path fill-rule="evenodd"
+                      d="M9.808 4.057a.75.75 0 0 1 .92-.527l3.116.849a.75.75 0 0 1 .528.915l-.823 3.121a.75.75 0 0 1-1.45-.382l.337-1.281a23.484 23.484 0 0 0-3.609 3.056.75.75 0 0 1-1.07.01L6 8.06l-3.72 3.72a.75.75 0 1 1-1.06-1.061l4.25-4.25a.75.75 0 0 1 1.06 0l1.756 1.755a25.015 25.015 0 0 1 3.508-2.85l-1.46-.398a.75.75 0 0 1-.526-.92Z"
+                      clip-rule="evenodd" />
+                  </svg>
+                  {{ else if lt $downloadChange 0.0 }}
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"
+                      style="height: 1em; margin-left: 0.25em;" class="size-4">
+                      <path fill-rule="evenodd"
+                      d="M1.22 4.22a.75.75 0 0 1 1.06 0L6 7.94l2.761-2.762a.75.75 0 0 1 1.158.12 24.9 24.9 0 0 1 2.718 5.556l.729-1.261a.75.75 0 0 1 1.299.75l-1.591 2.755a.75.75 0 0 1-1.025.275l-2.756-1.591a.75.75 0 1 1 .75-1.3l1.097.634a23.417 23.417 0 0 0-1.984-4.211L6.53 9.53a.75.75 0 0 1-1.06 0L1.22 5.28a.75.75 0 0 1 0-1.06Z"
+                      clip-rule="evenodd" />
+                  </svg>
+                  {{ end }}
+                  </div>
+                  {{ end }}
+                  <div class="color-highlight size-h3">{{ .JSON.Float "data.download_bits" | mul 0.000001 | printf "%.1f" }}</div>
+                  <div class="size-h6">DOWNLOAD</div>
+              </div>
+              <div>
+                  {{ $uploadChange := percentChange ($stats.JSON.Float "data.upload.avg_bits") (.JSON.Float "data.upload_bits") }}
+                  {{ if $showPercentage }}
+                  <div
+                  class="size-small {{ if gt $uploadChange 0.0 }}color-positive{{ else if lt $uploadChange 0.0 }}color-negative{{ else }}color-primary{{ end }}"
+                  style="display: inline-flex; align-items: center;">
+                  {{ $uploadChange | printf "%+.1f%%" }}
+                  {{ if gt $uploadChange 0.0 }}
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"
+                      style="height: 1em; margin-left: 0.25em;" class="size-4">
+                      <path fill-rule="evenodd"
+                      d="M9.808 4.057a.75.75 0 0 1 .92-.527l3.116.849a.75.75 0 0 1 .528.915l-.823 3.121a.75.75 0 0 1-1.45-.382l.337-1.281a23.484 23.484 0 0 0-3.609 3.056.75.75 0 0 1-1.07.01L6 8.06l-3.72 3.72a.75.75 0 1 1-1.06-1.061l4.25-4.25a.75.75 0 0 1 1.06 0l1.756 1.755a25.015 25.015 0 0 1 3.508-2.85l-1.46-.398a.75.75 0 0 1-.526-.92Z"
+                      clip-rule="evenodd" />
+                  </svg>
+                  {{ else if lt $uploadChange 0.0 }}
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"
+                      style="height: 1em; margin-left: 0.25em;" class="size-4">
+                      <path fill-rule="evenodd"
+                      d="M1.22 4.22a.75.75 0 0 1 1.06 0L6 7.94l2.761-2.762a.75.75 0 0 1 1.158.12 24.9 24.9 0 0 1 2.718 5.556l.729-1.261a.75.75 0 0 1 1.299.75l-1.591 2.755a.75.75 0 0 1-1.025.275l-2.756-1.591a.75.75 0 1 1 .75-1.3l1.097.634a23.417 23.417 0 0 0-1.984-4.211L6.53 9.53a.75.75 0 0 1-1.06 0L1.22 5.28a.75.75 0 0 1 0-1.06Z"
+                      clip-rule="evenodd" />
+                  </svg>
+                  {{ end }}
+                  </div>
+                  {{ end }}
+                  <div class="color-highlight size-h3">{{ .JSON.Float "data.upload_bits" | mul 0.000001 | printf "%.1f" }}</div>
+                  <div class="size-h6">UPLOAD</div>
+              </div>
+              <div>
+                  {{ $pingChange := percentChange ($stats.JSON.Float "data.ping.avg") (.JSON.Float "data.ping") }}
+                  {{ if $showPercentage }}
+                  <div
+                  class="size-small {{ if gt $pingChange 0.0 }}color-negative{{ else if lt $pingChange 0.0 }}color-positive{{ else }}color-primary{{ end }}"
+                  style="display: inline-flex; align-items: center;">
+                  {{ $pingChange | printf "%+.1f%%" }}
+                  {{ if lt $pingChange 0.0 }}
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"
+                      style="height: 1em; margin-left: 0.25em;" class="size-4">
+                      <path fill-rule="evenodd"
+                      d="M1.22 4.22a.75.75 0 0 1 1.06 0L6 7.94l2.761-2.762a.75.75 0 0 1 1.158.12 24.9 24.9 0 0 1 2.718 5.556l.729-1.261a.75.75 0 0 1 1.299.75l-1.591 2.755a.75.75 0 0 1-1.025.275l-2.756-1.591a.75.75 0 1 1 .75-1.3l1.097.634a23.417 23.417 0 0 0-1.984-4.211L6.53 9.53a.75.75 0 0 1-1.06 0L1.22 5.28a.75.75 0 0 1 0-1.06Z"
+                      clip-rule="evenodd" />
+                  </svg>
+                  {{ else if gt $pingChange 0.0 }}
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor"
+                      style="height: 1em; margin-left: 0.25em;" class="size-4">
+                      <path fill-rule="evenodd"
+                      d="M9.808 4.057a.75.75 0 0 1 .92-.527l3.116.849a.75.75 0 0 1 .528.915l-.823 3.121a.75.75 0 0 1-1.45-.382l.337-1.281a23.484 23.484 0 0 0-3.609 3.056.75.75 0 0 1-1.07.01L6 8.06l-3.72 3.72a.75.75 0 1 1-1.06-1.061l4.25-4.25a.75.75 0 0 1 1.06 0l1.756 1.755a25.015 25.015 0 0 1 3.508-2.85l-1.46-.398a.75.75 0 0 1-.526-.92Z"
+                      clip-rule="evenodd" />
+                  </svg>
+                  {{ end }}
+                  </div>
+                  {{ end }}
+                  <div class="color-highlight size-h3">{{ .JSON.Float "data.ping" | printf "%.0f ms" }}</div>
+                  <div class="size-h6">PING</div>
+              </div>
+              </div>
+              {% endraw %}
+
+          - type: monitor
+            cache: 1m
+            title: Мои сервисы
+            style: compact
+            sites:
+              - title: Traefik
+                same-tab: true
+                url: http://traefik.lab.local/
+              - title: GitLab
+                same-tab: true
+                url: http://gitlab.lab.local/
+              - title: Grafana
+                same-tab: true
+                url: http://grafana.lab.local/
+              - title: Portainer
+                same-tab: true
+                url: http://portainer.lab.local/
+              - title: Vaultwarden
+                same-tab: true
+                url: https://vw.bytefox.ru/
+              - title: Syncthing
+                same-tab: true
+                url: http://syncthing.lab.local/
+              - title: UrBackup
+                same-tab: true
+                url: http://backup.lab.local/
+              - title: BlueMap
+                same-tab: true
+                url: https://map.bytefox.ru/
+              - title: BookLore
+                same-tab: true
+                url: https://books.bytefox.ru/

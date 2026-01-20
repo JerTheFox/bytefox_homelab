@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'node-exporter'
+    static_configs:
+      - targets: ['node-exporter:9100']
+        labels:
+          alias: 'mgmt'
+      - targets: ['192.168.1.100:9100']
+        labels:
+          alias: 'worker'
+      - targets: ['192.168.1.101:9100']
+        labels:
+          alias: 'backup'
+  - job_name: 'minecraft'
+    static_configs:
+      - targets: ['192.168.1.100:9225']
+        labels:
+          alias: 'minecraft'
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+        labels:
+          alias: 'mgmt'
+      - targets: ['192.168.1.100:8080']
+        labels:
+          alias: 'worker'
+      - targets: ['192.168.1.101:8080']
+        labels:
+          alias: 'backup'

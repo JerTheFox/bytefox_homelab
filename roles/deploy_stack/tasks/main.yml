@@ -1,0 +1,16 @@
+---
+- name: Render Docker Compose template
+  template:
+    src: "{{ compose_template }}"
+    dest: "{{ root_dir }}/docker-compose.yml"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: '0640'
+  notify: Restart Docker Stack
+
+- name: Ensure Docker Stack is up
+  community.docker.docker_compose_v2:
+    project_src: "{{ root_dir }}"
+    state: present
+    remove_orphans: yes
+    pull: always

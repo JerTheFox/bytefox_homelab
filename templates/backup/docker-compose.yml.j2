@@ -1,0 +1,115 @@
+networks:
+  proxy_net:
+    driver: bridge
+
+volumes:
+  urbackup_data:
+    external: true
+    name: urbackup_data
+  urbackup_www:
+    external: true
+    name: urbackup_www
+
+services:
+  # INFRASTRUCTURE
+  docker-proxy:
+    image: tecnativa/docker-socket-proxy
+    container_name: docker-proxy
+    restart: always
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - CONTAINERS=1
+      - SERVICES=1
+      - TASKS=1
+      - POST=0
+    ports:
+      - "2375:2375" # для Homepage
+    networks:
+      - proxy_net
+
+  # MONITORING
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: node-exporter
+    hostname: {{ inventory_hostname }}
+    restart: always
+    environment:
+      - TZ={{ timezone }}
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($|/)'
+    ports:
+      - "9100:9100" # для Prometheus
+
+  cadvisor:
+    image: gcr.io/cadvisor/cadvisor:latest
+    container_name: cadvisor
+    hostname: {{ inventory_hostname }}
+    restart: unless-stopped
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    ports:
+      - "8080:8080"
+    networks:
+      - proxy_net
+    command:
+      - "-housekeeping_interval=15s"
+      - "-docker_only=true"
+
+  portainer_agent:
+    image: portainer/agent:alpine
+    container_name: portainer_agent
+    restart: always
+    environment:
+      - TZ={{ timezone }}
+    ports:
+      - "9001:9001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # Agent требует прямого доступа к сокету
+      - /var/lib/docker/volumes:/var/lib/docker/volumes
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+      - {{ root_dir }}/promtail_config/promtail-config.yml:/etc/promtail/config.yml
+    command: -config.file=/etc/promtail/config.yml
+    environment:
+      - HOSTNAME={{ ansible_hostname }}
+    networks:
+      - proxy_net
+
+  # BACKUP SERVICE
+  urbackup:
+    image: uroni/urbackup-server:latest
+    container_name: urbackup
+    restart: unless-stopped
+    environment:
+      - PUID=0 # Root нужен для доступа к ФС и создания снапшотов
+      - PGID=0
+      - TZ={{ timezone }}
+    volumes:
+      - urbackup_data:/var/urbackup
+      - urbackup_www:/usr/share/urbackup
+      - {{ backup_drive_path }}:/backups
+    ports:
+      - "55413:55413" # FastCGI (для управления)
+      - "55414:55414" # Web UI
+      - "55415:55415" # интернет клиенты
+      - "35623:35623/udp" # Discovery в локальной сети
+    networks:
+      - proxy_net

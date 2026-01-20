@@ -1,0 +1,30 @@
+---
+- name: Fix Docker DNS Issues (Restart Docker Service)
+  hosts: all
+  become: true
+  serial: 1 # по очереди
+
+  tasks:
+    - name: Check DNS connectivity from host before restart
+      command: ping -c 1 google.com
+      register: host_net_check
+      ignore_errors: true
+      changed_when: false
+
+    - name: Fail if host has no internet (Docker restart won't help)
+      fail:
+        msg: "Host {{ inventory_hostname }} has no internet connection. Fix network first."
+      when: host_net_check.rc != 0
+
+    - name: Restart Docker Service
+      service:
+        name: docker
+        state: restarted
+
+    - name: Wait for Docker to be ready
+      command: docker info
+      register: result
+      until: result.rc == 0
+      retries: 10
+      delay: 5
+      changed_when: false

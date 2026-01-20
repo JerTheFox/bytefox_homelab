@@ -1,0 +1,32 @@
+---
+# ==========================================
+# 1. БАЗОВАЯ НАСТРОЙКА (ВСЕ НОДЫ)
+# ==========================================
+- name: Apply Common Configuration & Base Security
+  hosts: all
+  roles:
+    - common
+
+# ==========================================
+# 2. КОНФИГУРАЦИЯ РОЛЕЙ СЕРВЕРОВ
+# ==========================================
+- name: Configure Management Node
+  hosts: mgmt
+  become: true
+  roles:
+    - mgmt
+    - deploy_stack
+
+- name: Configure Worker Node
+  hosts: worker
+  become: true
+  roles:
+    - worker
+    - deploy_stack
+
+- name: Configure Backup Node
+  hosts: backup
+  become: true
+  roles:
+    - backup
+    - deploy_stack

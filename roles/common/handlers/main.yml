@@ -1,0 +1,23 @@
+---
+- name: Restart SSH
+  become: true
+  service:
+    name: sshd
+    state: restarted
+
+- name: Reload Systemd
+  become: true
+  systemd:
+    daemon_reload: yes
+
+- name: Restart UFW
+  become: true
+  service:
+    name: ufw
+    state: reloaded
+
+- name: Restart Docker
+  become: true
+  service:
+    name: docker
+    state: restarted

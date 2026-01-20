@@ -1,0 +1,10 @@
+---
+- name: Restart Docker Stack
+  community.docker.docker_compose_v2:
+    project_src: "{{ root_dir }}"
+    state: present
+    pull: always  # missing - скачивать при отсутствии, always - обновлять
+
+- name: Reload UFW
+  community.general.ufw:
+    state: reloaded
