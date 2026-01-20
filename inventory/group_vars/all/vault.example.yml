@@ -1,4 +1,7 @@
 ---
+ansible_sudo_pass: "example"
+ansible_become_pass: "example"
+
 your_username: "example"
 your_password: "example"
 

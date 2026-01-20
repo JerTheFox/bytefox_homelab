@@ -15,7 +15,7 @@ stages:
   before_script:
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
-    - if [ -z "$SSH_PRIVATE_KEY" ]; then echo "❌ MISSING SSH_PRIVATE_KEY"; exit 1; fi
+    - if [ -z "$SSH_PRIVATE_KEY" ]; then echo "MISSING SSH_PRIVATE_KEY"; exit 1; fi
     - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_ed25519
     - chmod 600 ~/.ssh/id_ed25519
     - echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config
@@ -27,7 +27,7 @@ deploy_all:
   stage: deploy
   <<: *setup_env
   script:
-    - echo "🚀 Запуск полного обновления инфраструктуры..."
+    - echo "Запуск полного обновления инфраструктуры..."
     - ansible-playbook playbooks/site.yml
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
@@ -47,7 +47,7 @@ deploy_mgmt:
   stage: deploy
   <<: *setup_env
   script:
-    - echo "🛠 Обновляем только Management Node..."
+    - echo "Обновляем только Management Node..."
     - ansible-playbook playbooks/site.yml --limit mgmt
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
@@ -65,7 +65,7 @@ deploy_worker:
   stage: deploy
   <<: *setup_env
   script:
-    - echo "🛠 Обновляем только Worker Node..."
+    - echo "Обновляем только Worker Node..."
     - ansible-playbook playbooks/site.yml --limit worker
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
@@ -78,7 +78,7 @@ deploy_backup:
   stage: deploy
   <<: *setup_env
   script:
-    - echo "🛠 Обновляем только Backup Node..."
+    - echo "Обновляем только Backup Node..."
     - ansible-playbook playbooks/site.yml --limit backup
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
