@@ -10,7 +10,7 @@ import sys
 SOURCE_DIR = "/data/obsidian/jerthefox"
 REPO_ROOT = "/app/site-repo"
 
-# Пути
+# Пути назначения в Hugo
 DEST_CONTENT_DIR = os.path.join(REPO_ROOT, "content", "blog")
 DEST_IMG_DIR = os.path.join(REPO_ROOT, "static", "images", "blog")
 DEST_FILE_DIR = os.path.join(REPO_ROOT, "static", "files", "blog")
@@ -33,7 +33,6 @@ def build_asset_map():
     ASSET_MAP = {}
     print("Indexing assets...")
     
-    # Ищем везде в источнике, исключая .git
     for root, dirs, files in os.walk(SOURCE_DIR):
         if ".git" in root: continue
         for file in files:
@@ -57,6 +56,7 @@ def extract_frontmatter_and_body(content):
 def parse_yaml_tags(yaml_text):
     tags = []
     date = None
+    title = None
     
     tag_section_match = re.search(r'^tags:\s*\n((?:[\s-].*\n?)*)', yaml_text, re.MULTILINE)
     if tag_section_match:
@@ -67,28 +67,31 @@ def parse_yaml_tags(yaml_text):
     date_match = re.search(r'^date:\s*(.+)$', yaml_text, re.MULTILINE)
     if date_match:
         date = date_match.group(1).strip()
-        
-    return tags, date
 
-def extract_title(body, filename):
-    match = re.search(r'^#\s+(.+)$', body, re.MULTILINE)
-    if match:
-        return match.group(1).strip()
-    return os.path.splitext(filename)[0]
+    title_match = re.search(r'^title:\s*["\']?(.*?)["\']?$', yaml_text, re.MULTILINE)
+    if title_match:
+        title = title_match.group(1).strip()
+        
+    return tags, date, title
 
 def slugify(text):
     """
-    Превращает 'Моя Заметка' в 'моя-заметка'.
+    Создает URL из названия:
+    'Тест Ссылки' -> 'тест-ссылки'
     """
+    # Декодируем (убираем %20)
     text = urllib.parse.unquote(text)
+    # Lowercase
     text = text.lower().strip()
+    # Пробелы в дефисы
     text = re.sub(r'[\s_]+', '-', text)
+    # Убираем расширение .md
     text = text.replace('.md', '')
+    # Оставляем буквы, цифры, дефис
     text = re.sub(r'[^\w\-]', '', text)
     return text
 
 def copy_asset(filename, dest_dir):
-    # Декодируем имя файла, если оно пришло в URL виде
     filename = urllib.parse.unquote(filename)
     
     if filename not in ASSET_MAP:
@@ -105,7 +108,8 @@ def copy_asset(filename, dest_dir):
     if should_copy:
         try:
             shutil.copy2(src_path, dest_path)
-        except:
+        except Exception as e:
+            print(f"Error copying asset {filename}: {e}")
             return None
     return clean_filename
 
@@ -202,11 +206,13 @@ def process_file(filepath, filename):
 
     current_tags = []
     original_date = None
+    yaml_title = None
     
     if raw_frontmatter:
-        parsed_tags, parsed_date = parse_yaml_tags(raw_frontmatter)
+        parsed_tags, parsed_date, parsed_title = parse_yaml_tags(raw_frontmatter)
         current_tags.extend(parsed_tags)
         original_date = parsed_date
+        yaml_title = parsed_title
 
     inline_tags = re.findall(r'(?:^|\s)(#[\w\d\-_/а-яА-ЯёЁ]+)', body)
     current_tags.extend(inline_tags)
@@ -219,13 +225,22 @@ def process_file(filepath, filename):
             break
     if not is_triggered: return False
 
+    # ДАТА
     if original_date:
         date_str = original_date
     else:
         date_str = get_file_date(filepath)
         
-    title = extract_title(body, filename)
-    body = re.sub(r'^#\s+.+$', '', body, flags=re.MULTILINE)
+    # ЗАГОЛОВОК
+    # приоритет: YAML > Имя файла
+    if yaml_title:
+        title = yaml_title
+    else:
+        title = os.path.splitext(filename)[0]
+
+    # удаление дубликата заголовка
+    # удаляем H1 заголовок (# Title), если он стоит в самом начале текста.
+    body = re.sub(r'^\s*#\s+.*(\n|$)', '', body.lstrip(), count=1)
 
     for tag in inline_tags:
         body = body.replace(tag, "")
@@ -234,7 +249,7 @@ def process_file(filepath, filename):
 
     final_tags_set = set(tags_list)
     if raw_frontmatter:
-        pt, _ = parse_yaml_tags(raw_frontmatter)
+        pt, _, _ = parse_yaml_tags(raw_frontmatter)
         for t in pt:
             clean = t.replace('#', '')
             is_tech = False
@@ -242,6 +257,7 @@ def process_file(filepath, filename):
                 if clean.startswith(p.replace('#', '')): is_tech = True; break
             if not is_tech: final_tags_set.add(clean)
 
+    # АССЕТЫ И ССЫЛКИ
     try:
         body = process_links_and_assets(body)
     except Exception as e:
@@ -252,9 +268,6 @@ def process_file(filepath, filename):
     tags_yaml = ""
     for t in sorted_tags:
         tags_yaml += f"  - {t}\n"
-
-    if not title:
-        title = os.path.splitext(filename)[0]
 
     new_frontmatter = f"""---
 date: {date_str}
