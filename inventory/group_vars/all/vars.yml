@@ -1,16 +1,12 @@
 ---
-# ============================================================
 # SYSTEM DEFAULTS
-# ============================================================
 timezone: "Europe/Moscow"
 sys_user: "jerthefox"
 root_dir: "/home/{{ sys_user }}/bytefox"
 puid: "1000"
 pgid: "1000"
 
-# ============================================================
 # NETWORK TOPOLOGY & DOMAINS
-# ============================================================
 domain_internal: "lab.local"
 domain_public: "bytefox.ru"
 acme_email: "jerthefox@gmail.com" # Для SSL сертификатов
@@ -20,9 +16,7 @@ ip_mgmt: "192.168.1.10"
 ip_worker: "192.168.1.100"
 ip_backup: "192.168.1.101"
 
-# ============================================================
 # FIREWALL & MONITORING
-# ============================================================
 common_monitoring_ports:
   - '9100'  # Node Exporter
   - '8080' # cAdvisor
