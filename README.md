@@ -1,6 +1,6 @@
 # ByteFox Homelab Infrastructure
 
-Полностью декларативная Infrastructure-as-Code (IaC) конфигурация для управления распределенной домашней лабораторией. Проект демонстрирует подход GitOps, современные практики безопасности (Zero Trust Network), автоматизированный CI/CD и полный стек наблюдаемости (Observability).
+Полностью декларативная Infrastructure-as-Code (IaC) конфигурация для управления распределенной домашней лабораторией. Проект демонстрирует подход GitOps, современные практики безопасности (Zero Trust), автоматизированный CI/CD и полный стек наблюдаемости.
 
 ## Архитектура
 
@@ -16,18 +16,18 @@
 
 ### Технологический стек
 
-* **Оркестрация:** Ansible (Roles based), Docker Compose v2.
-* **Ingress & Security:** Traefik v3 (Wildcard SSL via Let's Encrypt DNS Challenge), Fail2Ban, OpenConnect (OCServe).
-* **CI/CD:** GitLab CI (Self-hosted runners).
+* **Оркестрация:** Ansible, Docker Compose v2.
+* **Ingress:** Traefik v3 (Wildcard SSL - Let's Encrypt DNS Challenge), Fail2Ban, OpenConnect (OCServ).
+* **CI/CD:** GitLab CI.
 * **Мониторинг:** Prometheus, Node Exporter, cAdvisor, Promtail, Loki, Grafana.
-* **Дашборд:** Glance (Single Pane of Glass).
+* **Дашборд:** Glance.
 * **Сеть:** TCP BBR Congestion Control, Split DNS.
 
 ---
 
 ## Особенности реализации
 
-### 1. GitOps & CI/CD Workflow
+### 1. GitOps
 
 Любое изменение в инфраструктуре проходит через GitLab CI. Пайплайн настроен на определение изменений (`rules:changes`):
 
@@ -121,7 +121,7 @@ ansible-playbook playbooks/site.yml --limit worker
 * **Решение:** Используется контейнер `itzg/minecraft-server` с флагом `ENABLE_AUTOPAUSE`.
 * **Мониторинг:** Написан кастомный виджет для Glance, который опрашивает Prometheus. Если `up == 0`, но контейнер жив - выводится статус "Auto-Paused", а не ошибка.
 
-### Obsidian to Hugo Pipeline
+### Obsidian to Hugo
 
 Реализован автоматический деплой заметок из Obsidian в статический сайт Hugo.
 
