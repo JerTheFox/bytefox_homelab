@@ -199,49 +199,16 @@ pages:
                       - title: Роутер
                         url: http://192.168.1.1/
                       - title: Bytefox
-                        url: https://bytefox.ru/
+                        url: https://{{ domain_public }}/
                       - title: BookLore
-                        url: https://books.bytefox.ru/
+                        url: https://books.{{ domain_public }}/
 
           - type: videos
             title: YouTube
             channels:
               - UCsImQfL4MrCr8UDsndx4aVA # Cathey
               - UCOxQWb-OuyCSZadzWqrKTCQ # Булджать
-              - UCDaIW2zPRWhzQ9Hj7a0QP1w # Усачев
-              - UCByOkBSMkZaUOB2xI0R9Hlg # sereGGa
-              - UCbARtRuHOksvED-jL2tihWw # Roman Shavyakov
-              - UC101o-vQ2iOj9vr00JUlyKw # Varlamov
-              - UC3bZgJqT_LfwLfeOtDgO88A # SHAPKA
-              - UC6cqazSR6CnVMClY0bJI0Lg # BadComedian
-              - UCGNNg4w67Ahcm7ueSvjIIdw # MILKA MAKER
-              - UCzXTNApTYz6Cwqh6Naadu1A # Россия23
-              - UCw-hAJI_Cc3AzwN1B6HGY8w # ЧБД
-              - UCWwRGYtMIQ-7T8OutGx_vpg # Сибирский
-              - UCwPzq5yQwczLmivBX8zq7Mw # Люди
-              - UCXFxgPppcehs2LoiKhkakQg # Крастер
-              - UCY1kMZp36IQSyNx_9h4mpCg # Mark Rober
-              - UCj7bSQWlq2O4lhGxGll5SUA # Вписка
-              - UC1CchA0SjApw4T-AYkN7ytg # IGM
-              - UC03-38aILdlkFAAc8lE6MQg # амоБлог
-              - UC4ink5TgHMuRmSvJ2N1LOaQ # Anacondaz
-              - UCpuOloQLINtXESATBSDAgOQ # Кшиштовский
-              - UCCROBQj3rdGNc-E_aMpbV_A # MyGap
-              - UCP_FacffygRMGA4CMpO-0XA # Dagon
-              - UCCKfZSbTG0PmnAVMk0HzoEw # Странное местечко
-              - UCE1QIfI8FV152bn1kN34gyQ # PoleznyiBes
-              - UCMCgOm8GZkHp8zJ6l7_hIuA # вДудь
-              - UCdu1AosJcTPsQYFolNHki8Q # SNAILKICK
-              - UCX6OQ3DkcsbYNE6H8uQQuVA # MrBeast
-              - UC5sSL56GJWCi4wsMpobTrAw # КЛИККЛАК
-              - UCJKSH7Bw0OjRoHlg1nYXPYQ # Mr.Freeman
-              - UCf31Gf5nCU8J6eUlr7QSU0w # Marmok
-              - UC4yxdlsaRT6WpZ_FZQ6uIpQ # Satyr
-              - UC8M5YVWQan_3Elm-URehz9w # Utopia
-              - UCn9bv143ECsDMw-kJCNN7QA # Чикен Карри
-              - UCR-Hcwi27-Ee6VnGzmxE1pA # Поперечный
-              - UCe0vDqnXvyAoa4cjg12FVbA # POPOSHA
-              - UCN04AE2yY26Rw-912kgQftA # Самый сахар
+              # etc
 
           - type: group
             title: Reddit
@@ -290,14 +257,14 @@ pages:
           - type: custom-api
             cache: 1h
             title: Скорость интернета
-            title-url: http://speedtest.lab.local/
-            url: http://speedtest.lab.local/api/v1/results/latest
+            title-url: http://speedtest.{{ domain_internal }}/
+            url: http://speedtest.{{ domain_internal }}/api/v1/results/latest
             headers:
               Authorization: Bearer {{ speedtest_glance_api_key }}
               Accept: application/json
             subrequests:
               stats:
-                url: http://speedtest.lab.local/api/v1/stats
+                url: http://speedtest.{{ domain_internal }}/api/v1/stats
                 headers:
                   Authorization: Bearer {{ speedtest_glance_api_key }}
                   Accept: application/json
@@ -401,28 +368,28 @@ pages:
             sites:
               - title: Traefik
                 same-tab: true
-                url: http://traefik.lab.local/
+                url: http://traefik.{{ domain_internal }}/
               - title: GitLab
                 same-tab: true
-                url: http://gitlab.lab.local/
+                url: http://gitlab.{{ domain_internal }}/
               - title: Grafana
                 same-tab: true
-                url: http://grafana.lab.local/
+                url: http://grafana.{{ domain_internal }}/
               - title: Portainer
                 same-tab: true
-                url: http://portainer.lab.local/
+                url: http://portainer.{{ domain_internal }}/
               - title: Vaultwarden
                 same-tab: true
-                url: https://vw.bytefox.ru/
+                url: https://vw.{{ domain_public }}/
               - title: Syncthing
                 same-tab: true
-                url: http://syncthing.lab.local/
+                url: http://syncthing.{{ domain_internal }}/
               - title: UrBackup
                 same-tab: true
-                url: http://backup.lab.local/
+                url: http://backup.{{ domain_internal }}/
               - title: BlueMap
                 same-tab: true
-                url: https://map.bytefox.ru/
+                url: https://map.{{ domain_public }}/
               - title: BookLore
                 same-tab: true
-                url: https://books.bytefox.ru/
+                url: https://books.{{ domain_public }}/

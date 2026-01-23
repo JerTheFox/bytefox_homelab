@@ -114,7 +114,7 @@ ansible-playbook playbooks/site.yml --limit worker
 
 ## Кастомные решения
 
-### Minecraft Auto-Pause & Monitoring
+### Minecraft Auto-Pause Monitoring
 
 Игровой сервер автоматически уходит в гибернацию при отсутствии игроков для экономии ресурсов CPU.
 
