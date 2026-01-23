@@ -6,8 +6,6 @@ positions:
   filename: /tmp/positions.yaml
 
 clients:
-  # Если мы на mgmt ноде - используем внутреннее имя контейнера "loki"
-  # Если на других - идем по сети на IP сервера
   - url: http://{{ 'loki' if 'mgmt' in group_names else '192.168.1.10' }}:3100/loki/api/v1/push
 
 scrape_configs:
